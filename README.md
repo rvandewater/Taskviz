@@ -45,13 +45,14 @@ How to read it:
 - The **label window** has its own colour and names the label predicate.
 - The **diamond** is the prediction time (`index_timestamp`): what lies before it is the model's input.
 
-Three cases get special treatment:
+Four cases get special treatment:
 
 | Case                                                                                                           | Drawn as                                                                                                             | Example                                                                           |
 | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | An offset far outside the task's timescale (a five-year look-back next to 24-hour windows)                     | Behind a break in the axis (`≈`), compressed, with its real value on the tick                                        | [new_admission_mortality](examples/figures/new_admission_mortality.svg)           |
 | A window counted from an event (30 days from the discharge that ends the input window)                         | The event gets its own stretch of the axis after a break, since the time until it is not to scale                    | [readmission_risk](examples/figures/readmission_risk.svg)                         |
-| A repeated trigger (`every` / `until`, ACES 0.8)                                                                | Named on the trigger: `icu_admission, every 1h until icu_discharge`. The windows are drawn for one prediction time | [icu_mortality_hourly](examples/figures/icu_mortality_hourly.svg)                 |
+| A repeated trigger (`every` / `until`, ACES 0.8)                                                                | Named on the trigger, with a row of small bars, one per prediction time. The windows are drawn for the first one | | [icu_mortality_hourly](examples/figures/icu_mortality_hourly.svg)                 |
+| A gap between the prediction time and the start of the label window                                             | Measured out (`gap: 1d`) in the row of the gap window, or before the label window's bar                          | [inhospital_mortality](examples/figures/inhospital_mortality.svg)|
 
 ![30-day readmission: the target window is counted from the discharge that ends the input window](examples/figures/readmission_risk.svg)
 

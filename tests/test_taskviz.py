@@ -75,6 +75,28 @@ def test_a_repeated_trigger_is_spelled_out():
     assert roles == {"icu_admission": ["trigger"], "icu_discharge": ["trigger end"], "death": ["label"]}
 
 
+def test_a_repeated_trigger_gets_a_bar_per_prediction_time():
+    def bars(svg):
+        return [n for n in ET.fromstring(svg).iter(f"{SVG}rect") if "tv-every" in (n.get("class") or "")]
+
+    svg = render_svg(read_task(EXAMPLES / "icu_mortality_hourly.yaml"))
+    assert len(bars(svg)) == 25  # the trigger and each of the 24 hours on the axis
+    assert {"every 1h", "… until icu_discharge"} <= set(texts(svg))
+    assert not bars(render_svg(read_task(MORTALITY)))
+    # Too close together to draw one by one: a single band.
+    dense = read_task(MORTALITY.replace("trigger: admission", "trigger: {predicate: admission, every: 1m}"))
+    assert len(bars(render_svg(dense))) == 1
+
+
+def test_a_gap_before_the_label_window_is_measured_out():
+    assert "gap: 1d" in texts(render_svg(read_task(EXAMPLES / "inhospital_mortality.yaml")))
+    # Without a gap window it is measured in the label window's row; no gap, no measure.
+    late = read_task(MORTALITY.replace("start: input.end", "start: input.end + 90m"))
+    assert "gap: 90m" in texts(render_svg(late))
+    for name in ("imminent_mortality", "new_admission_mortality", "readmission_risk"):
+        assert not any(t.startswith("gap:") for t in texts(render_svg(read_task(EXAMPLES / f"{name}.yaml"))))
+
+
 def test_the_theme_decides_the_colours():
     task = read_task(MORTALITY)
     assert "prefers-color-scheme" in render_svg(task) and "prefers-color-scheme" not in render_svg(
@@ -86,7 +108,7 @@ def test_the_theme_decides_the_colours():
 
 
 def test_two_figures_on_one_page_do_not_share_ids():
-    a, b = render_svg(read_task(MORTALITY)), render_svg(read_task(EXAMPLES / "readmission_risk.yaml"))
+    a, b = (render_svg(read_task(MORTALITY)), render_svg(read_task(EXAMPLES / "readmission_risk.yaml")))
     ids = lambda svg: {node.get("id") for node in ET.fromstring(svg).iter() if node.get("id")}  # noqa: E731
     assert ids(a) and not ids(a) & ids(b)
 

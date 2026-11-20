@@ -2,7 +2,9 @@
 
 Each side of a window is fixed (hours from the trigger), the record's start or end (the bar fades out at the
 edge), or the next or previous occurrence of an event (a dashed arrow to the edge, named). The label window
-has its own colour and the prediction time is marked with a diamond.
+has its own colour and the prediction time is marked with a diamond. A repeated trigger (``every``) gets a
+row of small bars, one per prediction time, and a gap between the prediction time and the start of the label
+window is measured out.
 
 The SVG carries its own styles and no scripts, so it works as an ``<img>``, inlined in a page, or in a
 Markdown file. Every element has a ``tv-*`` class, so a page that inlines it can restyle it.
@@ -12,9 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import math
+from datetime import timedelta
 from xml.sax.saxutils import escape, quoteattr
 
-from taskviz.task import Task, Window
+from taskviz.task import Side, Task, Window, humanize, parse_duration
 
 THEMES = {
     "light": {
@@ -83,6 +86,8 @@ def _rules(colors: dict, scope: str) -> str:
         f"{scope} .tv-stop.tv-is-label{{stop-color:{c['label']}}}"
         f"{scope} .tv-open{{stroke:{c['bar']}}}"
         f"{scope} .tv-index{{fill:{c['index']}}}"
+        f"{scope} .tv-gap{{stroke:{c['text']}}}"
+        f"{scope} .tv-gap-label{{fill:{c['text']}}}"
         f"{scope} .tv-break{{fill:{c['bg']}}}"
     )
 
@@ -93,7 +98,8 @@ def _style(theme: str, scope: str) -> str:
         f"{scope} .tv-name{{font-family:{_MONO};font-size:13px;font-weight:600}}"
         f"{scope} .tv-title{{font-size:14px;font-weight:700}}"
         f"{scope} .tv-trigger-label{{font-weight:700}}"
-        f"{scope} .tv-label,{scope} .tv-index-label{{font-size:11px;font-weight:600}}"
+        f"{scope} .tv-label,{scope} .tv-index-label,{scope} .tv-gap-label{{font-size:11px;font-weight:600}}"
+        f"{scope} .tv-gap{{stroke-width:1.2;fill:none}}"
         f"{scope} .tv-note{{font-size:11px;font-style:italic}}"
         f"{scope} .tv-axis,{scope} .tv-grid{{stroke-width:1}}"
         f"{scope} .tv-trigger{{stroke-width:2;stroke-dasharray:4 3}}"
@@ -266,7 +272,8 @@ def render_svg(
     uid = "tv" + hashlib.sha256(repr((task.data, theme, title, width)).encode()).hexdigest()[:8]
     shift = 26 if title else 0
     left, right, row_height, top = 150, width - 20, 56, 50 + shift
-    axis_y = top + len(rows) * row_height + 4
+    every = _every_hours(task)
+    axis_y = top + len(rows) * row_height + 4 + (_EVERY_ROW if every else 0)
     height = axis_y + 22 + (30 if legend else 6)
 
     segments = _segments(task)
@@ -335,6 +342,9 @@ def render_svg(
     for i, row in enumerate(rows):
         y = top + i * row_height + row_height / 2
         _draw_window(svg, row, y, position(row.start), position(row.end), left, right, uid)
+    _draw_gap(svg, rows, position, top, row_height)
+    if every:
+        _draw_every(svg, task, every, by_origin, top + len(rows) * row_height + 10, left, right)
 
     breaks = [at for segment in segments for at in segment.breaks]
     breaks += [segment.end + between / 2 for segment in segments[:-1]]
@@ -440,6 +450,96 @@ def _draw_window(svg: _Svg, row: Window, y: float, a, b, left: float, right: flo
         else:
             where = {"x": side, "y": y + 25, "text_anchor": "end" if row.index == "end" else "start"}
         svg.add("text", "prediction time", late=True, class_="tv-index-label", **where)
+
+
+def _index_side(rows: list[Window]) -> Side | None:
+    """The side that is the prediction time, when a window names one."""
+    row = next((row for row in rows if row.index), None)
+    return None if row is None else getattr(row, row.index)
+
+
+def _draw_gap(svg: _Svg, rows: list[Window], position, top: float, row_height: float) -> None:
+    """Measure out the time between the prediction time and the start of the label window, when there is
+    any: in the row of the window that ends where the label window starts (the gap window), or else in the
+    label window's own row, in the space before its bar."""
+    index = _index_side(rows)
+    target = next((row for row in rows if row.label), None)
+    if index is None or target is None:
+        return
+    start = target.start
+    if index.kind != "fixed" or start.kind != "fixed" or index.origin != start.origin:
+        return
+    hours = start.hours - index.hours
+    if hours * 3600 < 1:
+        return
+    gap = next(
+        (
+            row
+            for row in rows
+            if not row.label
+            and row.end.kind == "fixed"
+            and row.end.origin == start.origin
+            and abs(row.end.hours - start.hours) < _EPS
+        ),
+        None,
+    )
+    row = gap or target
+    y = top + rows.index(row) * row_height + row_height / 2 - (12 if gap else 0)
+    a, b = position(index), position(start)
+    svg.add(
+        "path",
+        class_="tv-gap",
+        d=f"M{a:.1f} {y - 4:.1f} v8 M{a:.1f} {y:.1f} H{b:.1f} M{b:.1f} {y - 4:.1f} v8",
+    )
+    text = f"gap: {humanize(timedelta(hours=hours))}"
+    svg.add("text", text, late=True, class_="tv-gap-label", x=(a + b) / 2, y=y - 5, text_anchor="middle")
+
+
+_EVERY_ROW = 30  # the height of the row of repeated prediction times
+
+
+def _every_hours(task: Task) -> float | None:
+    """A repeated trigger's interval in hours; None when the trigger is not repeated."""
+    delta = parse_duration(task.every) if task.every else None
+    return delta.total_seconds() / 3600 if delta and delta.total_seconds() > 0 else None
+
+
+def _draw_every(svg: _Svg, task: Task, every: float, by_origin: dict, y: float, left: float, right: float):
+    """A repeated trigger: one small bar per prediction time, from the first one to the end of its stretch
+    of the axis. They go on until the ``until`` event, which is not on the axis."""
+    index = _index_side(task.windows)
+    origin, first = (index.origin, index.hours) if index and index.kind == "fixed" else ("trigger", 0.0)
+    segment = by_origin.get(origin, by_origin["trigger"])
+    svg.add(
+        "text",
+        f"every {task.every}",
+        late=True,
+        class_="tv-index-label",
+        x=left - 10,
+        y=y + 4,
+        text_anchor="end",
+    )
+    last = segment.x(first)
+    if segment.low - _EPS <= first <= segment.high + _EPS:
+        count = int((segment.high - first) / every + _EPS)
+        last = segment.x(first + count * every)
+        if count and (last - segment.x(first)) / count < 4:
+            # Too close together to tell apart: one band over the stretch they cover.
+            svg.add(
+                "rect",
+                class_="tv-index tv-every",
+                x=segment.x(first),
+                y=y - 3,
+                width=last - segment.x(first),
+                height=6,
+                rx=2,
+            )
+        else:
+            for k in range(count + 1):
+                at = segment.x(first + k * every)
+                svg.add("rect", class_="tv-index tv-every", x=at - 1.5, y=y - 6, width=3, height=12, rx=1)
+    note = f"… until {task.until}" if task.until else "…"
+    svg.add("text", note, late=True, class_="tv-note", x=min(last + 10, right - 2), y=y + 4)
 
 
 def _draw_legend(svg: _Svg, x: float, y: float) -> None:
