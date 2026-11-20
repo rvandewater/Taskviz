@@ -27,8 +27,9 @@ class Table:
 
     def to_html(self, class_name: str = "taskviz-table") -> str:
         def cells(tag, values):
+            right = ' style="text-align:right"'
             return "".join(
-                f"<{tag}{' style=\"text-align:right\"' if i in self.numeric else ''}>{escape(str(v))}</{tag}>"
+                f"<{tag}{right if i in self.numeric else ''}>{escape(str(v))}</{tag}>"
                 for i, v in enumerate(values)
             )
 
