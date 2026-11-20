@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskviz"
+version = "0.1.0"
+description = "Draw an ACES task configuration as a timeline figure, and put its cohort's numbers in a table."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "pyyaml>=6.0",
+  # The duration parser ACES uses, so offsets are placed where ACES places them.
+  "pytimeparse>=1.1.8",
+]
+
+[project.optional-dependencies]
+# Count existing label files.
+labels = ["polars>=1.35,<2"]
+# Run ACES on a MEDS dataset and count the cohort.
+extract = ["polars>=1.35,<2", "es-aces>=0.8.0"]
+dev = ["pytest>=8", "polars>=1.35,<2", "es-aces>=0.8.0"]
+
+[project.scripts]
+taskviz = "taskviz.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules"
+testpaths = ["tests", "src"]
+
+[tool.black]
+line-length = 110

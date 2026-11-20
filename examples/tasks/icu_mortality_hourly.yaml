@@ -1,0 +1,28 @@
+# Hourly ICU mortality: a prediction every hour of an ICU stay, of death within the next 24 hours.
+# Uses the repeated trigger of ACES 0.8 (`every` / `until`).
+predicates:
+  icu_admission:
+    code: { regex: "^ICU_ADMISSION//" }
+  icu_discharge:
+    code: { regex: "^ICU_DISCHARGE//" }
+  death:
+    code: MEDS_DEATH
+
+trigger:
+  predicate: icu_admission
+  every: 1h
+  until: icu_discharge
+
+windows:
+  input:
+    start: NULL
+    end: trigger
+    start_inclusive: True
+    end_inclusive: True
+    index_timestamp: end
+  target:
+    start: input.end
+    end: start + 24h
+    start_inclusive: False
+    end_inclusive: True
+    label: death

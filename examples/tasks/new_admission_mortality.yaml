@@ -1,0 +1,42 @@
+# In-hospital mortality, predicted 24 hours after admission, for patients without a hospital stay in the
+# five years before. The look-back is far outside the timescale of the other windows, so the figure puts it
+# behind a break in the axis.
+predicates:
+  admission:
+    code: { regex: "^HOSPITAL_ADMISSION//" }
+  discharge:
+    code: { regex: "^HOSPITAL_DISCHARGE//" }
+  death:
+    code: MEDS_DEATH
+  discharge_or_death:
+    expr: or(discharge, death)
+
+trigger: admission
+
+windows:
+  no_recent_stay:
+    start: end - 1825 days
+    end: trigger
+    start_inclusive: True
+    end_inclusive: False
+    has:
+      discharge: (None, 0)
+  input:
+    start: NULL
+    end: trigger + 24h
+    start_inclusive: True
+    end_inclusive: True
+    index_timestamp: end
+  gap:
+    start: trigger
+    end: start + 24h
+    start_inclusive: False
+    end_inclusive: True
+    has:
+      discharge_or_death: (None, 0)
+  target:
+    start: input.end
+    end: start -> discharge_or_death
+    start_inclusive: False
+    end_inclusive: True
+    label: death
