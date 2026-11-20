@@ -12,9 +12,9 @@ The figure is read from the task's YAML alone. No data and no ACES installation 
 ## Install
 
 ```bash
-pip install "taskviz @ git+https://github.com/OWNER/Taskviz"
+pip install "taskviz @ git+https://github.com/rvandewater/Taskviz"
 # with ACES, to count a cohort on a MEDS dataset:
-pip install "taskviz[extract] @ git+https://github.com/OWNER/Taskviz"
+pip install "taskviz[extract] @ git+https://github.com/rvandewater/Taskviz"
 ```
 
 Python 3.11 or newer. The figure and the windows and predicates tables need only `pyyaml` and
