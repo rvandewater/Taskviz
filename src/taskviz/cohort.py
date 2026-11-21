@@ -74,7 +74,9 @@ class Counts:
         """One row per split and a total.
 
         A count below ``min_count`` (and above zero) is shown as ``<min_count``, and a prevalence computed
-        from one is left out.
+        from one is left out. The total of a column with a hidden count is given as a bound (``>`` the sum
+        of the counts that are shown) and the total prevalence is left out, so that a hidden count cannot
+        be worked out by subtracting the other rows from the total.
 
         >>> counts = Counts({"train": SplitCounts(800, 500, 40), "held_out": SplitCounts(90, 60, 4)})
         >>> print(counts.table(min_count=10).to_markdown())
@@ -82,19 +84,33 @@ class Counts:
         | --- | ---: | ---: | ---: | ---: |
         | train | 800 | 500 | 40 | 5.0% |
         | held_out | 90 | 60 | <10 |  |
-        | Total | 890 | 560 | 44 | 4.9% |
+        | Total | 890 | 560 | >40 |  |
         <BLANKLINE>
         """
+
+        def hidden(value):
+            return value is not None and 0 < value < min_count
 
         def shown(value):
             if value is None:
                 return ""
-            return f"<{min_count}" if 0 < value < min_count else f"{value:,}"
+            return f"<{min_count}" if hidden(value) else f"{value:,}"
 
-        def prevalence(split):
+        def shown_total(field_name):
+            """The total of a column, as a bound when one of its counts is hidden."""
+            values = [getattr(split, field_name) for split in self.per_split.values()]
+            concealed = sum(hidden(v) for v in values)
+            if not concealed or any(v is None for v in values):
+                return shown(getattr(total, field_name))
+            visible = sum(v for v in values if not hidden(v))
+            # With nothing shown, the only public bound is the one the hidden cells imply themselves.
+            return f">{visible:,}" if visible else f"<{concealed * (min_count - 1) + 1:,}"
+
+        def prevalence(split, is_total=False):
             if split.positives is None or not split.samples:
                 return ""
-            if 0 < split.positives < min_count or 0 < split.samples < min_count:
+            parts = list(self.per_split.values()) if is_total else [split]
+            if any(hidden(part.positives) or hidden(part.samples) for part in parts + [split]):
                 return ""
             return f"{split.positives / split.samples:.1%}"
 
@@ -108,10 +124,15 @@ class Counts:
             set(self.per_split) - set(SPLIT_ORDER)
         )
         named = [(name, self.per_split[name]) for name in order]
-        for name, split in named + ([("Total", total)] if len(named) > 1 else []):
+        for name, split in named:
             row = [name] + ([shown(split.trigger_events)] if with_triggers else [])
             row += [shown(split.samples), shown(split.subjects)]
             row += [shown(split.positives), prevalence(split)] if with_labels else []
+            rows.append(row)
+        if len(named) > 1:
+            row = ["Total"] + ([shown_total("trigger_events")] if with_triggers else [])
+            row += [shown_total("samples"), shown_total("subjects")]
+            row += [shown_total("positives"), prevalence(total, is_total=True)] if with_labels else []
             rows.append(row)
         return Table(columns, rows, numeric=tuple(range(1, len(columns))))
 
