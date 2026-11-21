@@ -124,7 +124,8 @@ counts.as_dict()                           # plain numbers, for JSON
 
 Only aggregate counts are computed and returned; no row of the data is printed or kept. For data that may
 not be published at full resolution, `--min-count N` shows every count below `N` as `<N` and leaves out a
-prevalence that would give one away.
+prevalence that would give one away. The total of a column with a hidden count is then given as a bound
+(`>40`) rather than exactly, so the hidden count cannot be recovered by subtraction.
 
 ## Everything on one page
 

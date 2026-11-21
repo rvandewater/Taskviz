@@ -163,6 +163,20 @@ def test_counts_from_aces_on_a_meds_dataset(meds_root, mortality_config):
     assert "Cohort on synthetic" in render_html(read_task(mortality_config), counts)
 
 
+def test_hidden_counts_cannot_be_recovered_from_the_total():
+    from taskviz.cohort import Counts, SplitCounts
+
+    counts = Counts({"train": SplitCounts(800, 500, 40, 900), "held_out": SplitCounts(90, 60, 4, 95)})
+    total = counts.table(min_count=10).rows[-1]
+    # Positives are hidden in one split: the total is a bound, and no total prevalence is given.
+    assert total == ["Total", "995", "890", "560", ">40", ""]
+    # Without suppression the total is exact.
+    assert counts.table().rows[-1] == ["Total", "995", "890", "560", "44", "4.9%"]
+    # Every split hidden: only the bound the hidden cells imply themselves.
+    small = Counts({"train": SplitCounts(4, 4, 1), "held_out": SplitCounts(3, 3, 0)})
+    assert small.table(min_count=5).rows[-1] == ["Total", "<9", "<9", "<5", ""]
+
+
 def test_counts_from_existing_label_files(tmp_path):
     import polars as pl
     from datetime import datetime
